@@ -148,14 +148,18 @@ class MotionPlanning(Drone):
         # convert start position to current position rather than map center
         grid_start = (int(current_local_position[0])-north_offset, int(current_local_position[1])-east_offset)
 
-        # Set goal as some arbitrary position on the grid
-        grid_goal = (-north_offset + 10, -east_offset + 10)
-        # TODO: adapt to set goal as latitude / longitude position and convert
+        # set goal as latitude / longitude position and convert
+        lon_goal = -122.399507
+        lat_goal = 37.793535
+
+        goal_global = np.array([lon_goal, lat_goal, 0])
+        goal_local = global_to_local(goal_global, self.global_home)
+        grid_goal = (int(goal_local[0])-north_offset, int(goal_local[1])-east_offset)
 
         # Run A* to find a path from start to goal
         print('Local Start and Goal: ', grid_start, grid_goal)
         path, _ = a_star(grid, heuristic, grid_start, grid_goal)
-        # TODO: prune path to minimize number of waypoints
+        # prune path to minimize number of waypoints
         pruned_path = prune_path(path)
 
         # Convert path to waypoints
