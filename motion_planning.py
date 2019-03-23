@@ -149,8 +149,8 @@ class MotionPlanning(Drone):
         grid_start = (int(current_local_position[0])-north_offset, int(current_local_position[1])-east_offset)
 
         # set goal as latitude / longitude position and convert
-        lon_goal = -122.399507
-        lat_goal = 37.793535
+        lon_goal = -122.3961
+        lat_goal = 37.7940
 
         goal_global = np.array([lon_goal, lat_goal, 0])
         goal_local = global_to_local(goal_global, self.global_home)
