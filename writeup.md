@@ -36,46 +36,104 @@ The second significant difference is the `path_plan()` function that the `motion
 
 Part of the `planning_utils.py` script is the `Action` class as well, which contains all the allowed moves on the planning grid as well as the costs related to them. `valid_actions()` function removes all the actions from the `Action` class that cannot be executed from the specific position on the planning grid, because of obstacles or end of grid.
 
-The main part of the `planning_utils.py` script is the `a_star()` function that executes the A* algorithm on the previously created planning grid, start and goal locations. This function uses the `heuristic()` function as well, to assign cost to a specific A* queue based on the distance to the goal, in addition to branch cost. 
+The main part of the `planning_utils.py` script is the `a_star()` function that executes the A* algorithm on the previously created planning grid, start and goal locations. This function uses the `heuristic()` function as well, to assign cost to A* queue based on the distance to the goal, in addition to branch cost. 
 
-### Implementing Your Path Planning Algorithm
+### Implementation of the Path Planning Algorithm
 
-#### 1. Set your global home position
-Here students should read the first line of the csv file, extract lat0 and lon0 as floating point values and use the self.set_home_position() method to set global home. Explain briefly how you accomplished this in your code.
+#### 1. Setting global home position
+The global home position has been read on the line 122 of the `motion_planning.py` script from the `colliders.csv` file as follows:
+```python
+lat_lon_data = np.loadtxt('colliders.csv', usecols=(0, 1), delimiter=',', dtype='str')
 
+# read lat0, lon0 from colliders into floating point values
+lat0 = float(lat_lon_data[0,0][5:])
+lon0 = float(lat_lon_data[0,1][5:])
 
-And here is a lovely picture of our downtown San Francisco environment from above!
-![Map of SF](./misc/map.png)
+# set home position to (lon0, lat0, 0)
+self.set_home_position(lon0, lat0, 0)
+```
+After reading the home position it has been set with help of the `set_home_position()` function inherited from the `Drone` class.
 
-#### 2. Set your current local position
-Here as long as you successfully determine your local position relative to global home you'll be all set. Explain briefly how you accomplished this in your code.
+#### 2. Setting current local position
+Current local position has been converted from the `self.global_position` provided by the `Drone` class:
+```python
+# retrieve current global position
+current_global_position = self.global_position
 
+# convert to current local position using global_to_local()
+current_local_position = global_to_local(current_global_position, self.global_home)
+```
 
-Meanwhile, here's a picture of me flying through the trees!
-![Forest Flying](./misc/in_the_trees.png)
+#### 3. Setting grid start position from local position
+With the  extracted `current_local_position` grid start position can be set to current location by subtracting north and east offsets received from the `create_grid()` function. It is necessary to convert `current_local_position` coordinates to integer so that they can be used as parameters for the A* algorithm.
 
-#### 3. Set grid start position from local position
-This is another step in adding flexibility to the start location. As long as it works you're good to go!
+```python
+# convert start position to current position rather than map center
+grid_start = (int(current_local_position[0])-north_offset, int(current_local_position[1])-east_offset)
+```
 
-#### 4. Set grid goal position from geodetic coords
-This step is to add flexibility to the desired goal location. Should be able to choose any (lat, lon) within the map and have it rendered to a goal location on the grid.
+#### 4. Setting grid goal position from geodetic coords
+To add additional flexibility to the implementation, global longitude and latitude goal coordinates have been converted to local goal coordinates. Afterwards they were converted to grid goal position coordinates by converting them to integer and adding offsets(so that they can be used by the A* algorithm):
+```python
+# set goal as latitude / longitude position and convert
+lon_goal = -122.3961
+lat_goal = 37.7940
 
-#### 5. Modify A* to include diagonal motion (or replace A* altogether)
-Minimal requirement here is to modify the code in planning_utils() to update the A* implementation to include diagonal motions on the grid that have a cost of sqrt(2), but more creative solutions are welcome. Explain the code you used to accomplish this step.
+goal_global = np.array([lon_goal, lat_goal, 0])
+goal_local = global_to_local(goal_global, self.global_home)
+grid_goal = (int(goal_local[0])-north_offset, int(goal_local[1])-east_offset)
 
-#### 6. Cull waypoints 
-For this step you can use a collinearity test or ray tracing method like Bresenham. The idea is simply to prune your path of unnecessary waypoints. Explain the code you used to accomplish this step.
+```
 
+#### 5. Modifying A* to include diagonal motion
+The `Action` class has been extended in the `planning_utils.py` script to support the diagonal motions. This has been done by adding new actions as follows:
+```python
+# diagonal motions
+NORTH_EAST = (-1, 1, math.sqrt(2))
+EAST_SOUTH = (1, 1, math.sqrt(2))
+SOUTH_WEST = (1, -1, math.sqrt(2))
+WEST_NORTH = (-1, -1, math.sqrt(2))
+```
+Diagonal motions have slightly higher cost of sqrt(2). 
 
+#### 6. Culling waypoints 
+The path has been pruned by removing unnecessary waypoints that find themselves between two waypoints and do not add any new information to the path.
 
+This has been achieved in `planning_utils.py` script by first creating collinearity check function to see if three neighbouring points are on the same path and the middle one is unnecessary:
+```python
+def collinearity_check(p1, p2, p3, epsilon=1e-6):   
+    m = np.concatenate((p1, p2, p3), 0)
+    det = np.linalg.det(m)
+    return abs(det) < epsilon
+```
+
+Then this function has been applied in the `prune_path()` function to loop through the all waypoints in the path and remove unnecessary one:
+```python
+def prune_path(path):
+    pruned_path = [p for p in path]
+    i = 0
+    while i < len(pruned_path) - 2:
+        p1 = point(pruned_path[i])
+        p2 = point(pruned_path[i+1])
+        p3 = point(pruned_path[i+2])       
+        if collinearity_check(p1, p2, p3):
+            pruned_path.remove(pruned_path[i+1])
+        else:
+            i += 1
+            
+    return pruned_path
+```
+
+This function has been called in the `path_plan()` function of the `motion_planning.py` script on the line 163, to prune the path returned from the A* algorithm:
+```python
+# prune path to minimize number of waypoints
+pruned_path = prune_path(path)
+```
 ### Execute the flight
-#### 1. Does it work?
-It works!
+#### 1. Working implementation
+
 
 ### Double check that you've met specifications for each of the [rubric](https://review.udacity.com/#!/rubrics/1534/view) points.
-  
-# Extra Challenges: Real World Planning
 
-For an extra challenge, consider implementing some of the techniques described in the "Real World Planning" lesson. You could try implementing a vehicle model to take dynamic constraints into account, or implement a replanning method to invoke if you get off course or encounter unexpected obstacles.
 
 
